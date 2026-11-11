@@ -2,144 +2,132 @@ import processing.serial.*;
 
 Serial myPort;
 
-// Sensor data and smoothing targets
+// Telemetry Targets & Interpolated Values
 float targetRoll = 0, targetPitch = 0;
 float currentRoll = 0, currentPitch = 0;
-boolean serialConnected = false;
 
-// Particle system for rocket thrust
-ArrayList<Particle> particles;
+float[] targetFins  = new float[3];
+float[] currentFins = new float[3];
+
+boolean serialConnected = false;
 
 void setup() {
   size(1000, 750, P3D);
   smooth(8);
-  pixelDensity(1);
-  particles = new ArrayList<Particle>();
-
+  
   println("--- Available Serial Ports ---");
   printArray(Serial.list());
   println("------------------------------");
 
-  // Automatically select port or specify exact COM port string
   try {
-    // Replace index [0] with your ESP32 port (e.g., "COM5" or Serial.list()[1])
-    String portName = Serial.list()[0];
+    // Select your ESP32 COM port index (e.g. Serial.list()[0] or "COM5")
+    String portName = Serial.list()[0]; 
     myPort = new Serial(this, portName, 115200);
     myPort.bufferUntil('\n');
     myPort.clear();
     serialConnected = true;
   } catch (Exception e) {
-    println("Failed to open serial port! Verify connection and port index.");
+    println("Failed to open port. Check COM index.");
     serialConnected = false;
   }
 }
 
 void draw() {
-  background(10, 14, 23);
+  background(15, 18, 28);
+  
+  // Interpolation for 60 FPS visual smoothness
+  currentRoll  = lerp(currentRoll, targetRoll, 0.25);
+  currentPitch = lerp(currentPitch, targetPitch, 0.25);
+  for (int i = 0; i < 3; i++) {
+    currentFins[i] = lerp(currentFins[i], targetFins[i], 0.3);
+  }
 
-  // Interpolate angles for smooth motion (60 FPS rendering)
-  currentRoll = lerp(currentRoll, targetRoll, 0.2);
-  currentPitch = lerp(currentPitch, targetPitch, 0.2);
+  // Lighting
+  ambientLight(70, 75, 90);
+  directionalLight(255, 255, 255, 0.6, 1, -0.8);
+  pointLight(255, 120, 40, width/2, height/2 + 100, 150);
 
-  // Setup 3D Scene Lighting
-  ambientLight(60, 65, 80);
-  directionalLight(255, 245, 230, 0.5, 1, -0.8);
-  pointLight(255, 120, 30, width/2, height/2 + 100, 100);
-
-  // Move origin to viewport center
+  // Center Scene
   pushMatrix();
   translate(width / 2, height / 2 - 20, 0);
-
-  // Apply rotations according to aerospace conventions
-  rotateX(radians(currentPitch));
+  
+  // Apply Rocket Attitude (YAW, PITCH, ROLL)
+  rotateX(radians(-currentPitch));
   rotateZ(radians(currentRoll));
-
-  // Render High-Detail Rocket Model
-  drawProfessionalRocket();
-
-  // Generate & Update Exhaust Particles
-  for (int i = 0; i < 3; i++) {
-    particles.add(new Particle(0, 130, 0));
-  }
+  
+  // Render Rocket Body & 3 Dynamic Servo Fins
+  drawRocketWithFins();
+  
   popMatrix();
 
-  // Render Exhaust Particles in World Space
-  updateAndDrawParticles();
-
-  // Draw 2D HUD Dashboard Overlay
+  // Draw 2D Dashboard
   drawHUD();
 }
 
-// -------------------------------------------------------------
-// 3D ROCKET GRAPHICS PIPELINE
-// -------------------------------------------------------------
-void drawProfessionalRocket() {
+void drawRocketWithFins() {
   noStroke();
 
-  // 1. Core Metallic Fuselage
+  // 1. Main Fuselage Body
   pushMatrix();
-  fill(230, 235, 240);
-  specular(180, 180, 180);
-  shininess(15.0);
-  drawCylinder(24, 24, 200, 24);
+  fill(230, 235, 245);
+  drawCylinder(26, 26, 220, 24);
   popMatrix();
 
-  // 2. Command Module Nose Cone
+  // 2. Nose Cone
   pushMatrix();
-  translate(0, -100, 0);
+  translate(0, -110, 0);
   fill(220, 40, 40);
-  drawCone(24, 70, 24);
+  drawCone(26, 70, 24);
   popMatrix();
 
-  // 3. Rocket Stage Stripes & Cockpit Glass Ring
+  // 3. Accent Ring
   pushMatrix();
-  translate(0, -40, 0);
-  fill(30, 35, 45);
-  drawCylinder(24.5, 24.5, 20, 24);
+  translate(0, -45, 0);
+  fill(35, 40, 50);
+  drawCylinder(26.5, 26.5, 18, 24);
   popMatrix();
 
-  // 4. Twin Side Booster Pods
-  for (int angle = 0; angle < 360; angle += 180) {
-    pushMatrix();
-    rotateY(radians(angle));
-    translate(32, 20, 0);
-    fill(200, 205, 215);
-    drawCylinder(10, 10, 120, 16); // Booster body
-
-    translate(0, -60, 0);
-    fill(220, 40, 40);
-    drawCone(10, 25, 16); // Booster nose
-    popMatrix();
-  }
-
-  // 5. Aerodynamic Stabilizer Fins (4-way symmetry)
-  fill(220, 40, 40);
-  for (int i = 0; i < 4; i++) {
-    pushMatrix();
-    rotateY(HALF_PI * i);
-    translate(24, 70, 0);
-
-    beginShape(TRIANGLES);
-    vertex(0, -40, 0);
-    vertex(35, 40, 0);
-    vertex(0, 30, 0);
-
-    vertex(0, -40, 0);
-    vertex(0, 30, 0);
-    vertex(-5, 30, -2);
-    endShape();
-    popMatrix();
-  }
-
-  // 6. Main Engine Nozzle
+  // 4. Engine Nozzle
   pushMatrix();
-  translate(0, 105, 0);
+  translate(0, 115, 0);
   fill(60, 65, 75);
-  drawCylinder(18, 12, 25, 20);
+  drawCylinder(20, 14, 25, 20);
   popMatrix();
+
+  // 5. RENDER 3 DYNAMIC SERVO FINS (Spaced 120 degrees apart)
+  for (int i = 0; i < 3; i++) {
+    pushMatrix();
+    // Position fin around base (120 deg steps: 0°, 120°, 240°)
+    rotateY(radians(i * 120));
+    translate(26, 75, 0); // Move to outer edge of fuselage
+    
+    // Draw Hinge Shaft (Servo Shaft)
+    fill(200, 200, 200);
+    drawCylinder(3, 3, 10, 8);
+    
+    // ROTATE FIN ACCORDING TO REAL-TIME SERVO DEFLECTION
+    // Rotation occurs along the radial axis (hinge line)
+    rotateX(radians(currentFins[i]));
+
+    // Render Fin Geometry
+    fill(230, 50, 50);
+    beginShape(TRIANGLES);
+    // Outer side
+    vertex(0, -35, 0);
+    vertex(38, 35, 0);
+    vertex(0, 30, 0);
+    
+    // Inner side for 3D thickness
+    vertex(0, -35, -2);
+    vertex(38, 35, 0);
+    vertex(0, 30, -2);
+    endShape();
+    
+    popMatrix();
+  }
 }
 
-// Custom mesh utilities
+// Custom Mesh Builders
 void drawCylinder(float topR, float bottomR, float h, int sides) {
   float angleStep = TWO_PI / sides;
   beginShape(QUAD_STRIP);
@@ -150,6 +138,7 @@ void drawCylinder(float topR, float bottomR, float h, int sides) {
   }
   endShape();
 }
+
 void drawCone(float baseR, float h, int sides) {
   float angleStep = TWO_PI / sides;
   beginShape(TRIANGLES);
@@ -164,53 +153,7 @@ void drawCone(float baseR, float h, int sides) {
 }
 
 // -------------------------------------------------------------
-// EXHAUST PARTICLE SYSTEM
-// -------------------------------------------------------------
-void updateAndDrawParticles() {
-  hint(DISABLE_DEPTH_TEST);
-  for (int i = particles.size() - 1; i >= 0; i--) {
-    Particle p = particles.get(i);
-    p.update();
-    p.display();
-    if (p.isDead()) {
-      particles.remove(i);
-    }
-  }
-  hint(ENABLE_DEPTH_TEST);
-}
-
-class Particle {
-  PVector pos, vel;
-  float lifespan, maxLife;
-  float size;
-
-  Particle(float x, float y, float z) {
-    pos = new PVector(x + random(-4, 4), y + random(0, 5), z + random(-4, 4));
-    vel = new PVector(random(-0.5, 0.5), random(4, 9), random(-0.5, 0.5));
-    lifespan = maxLife = random(20, 40);
-    size = random(8, 18);
-  }
-
-  void update() {
-    pos.add(vel);
-    lifespan--;
-  }
-
-  void display() {
-    pushMatrix();
-    translate(width/2 + pos.x, height/2 - 20 + pos.y, pos.z);
-    noStroke();
-    float pct = lifespan / maxLife;
-    fill(255, 140 * pct, 20, pct * 200);
-    ellipse(0, 0, size * pct, size * pct);
-    popMatrix();
-  }
-
-  boolean isDead() { return lifespan <= 0; }
-}
-
-// -------------------------------------------------------------
-// SERIAL PARSER & HUD
+// SERIAL TELEMETRY PARSER & HUD OVERLAY
 // -------------------------------------------------------------
 void serialEvent(Serial port) {
   try {
@@ -218,40 +161,50 @@ void serialEvent(Serial port) {
     if (inString != null) {
       inString = trim(inString);
       String[] data = split(inString, ',');
-      if (data.length == 2) {
-        targetRoll  = float(data[0]);
-        targetPitch = float(data[1]);
+      if (data.length == 5) {
+        targetRoll     = float(data[0]);
+        targetPitch    = float(data[1]);
+        targetFins[0]  = float(data[2]);
+        targetFins[1]  = float(data[3]);
+        targetFins[2]  = float(data[4]);
       }
     }
   } catch (Exception e) {
-    // Ignore malformed frame drops
+    // Ignore dropped packets
   }
 }
 
 void drawHUD() {
   camera();
   hint(DISABLE_DEPTH_TEST);
-
-  // Status Box
-  fill(15, 20, 30, 200);
-  stroke(40, 50, 70);
-  rect(15, 15, 240, 95, 8);
+  
+  // Dashboard background
+  fill(15, 20, 30, 220);
+  stroke(45, 55, 75);
+  rect(15, 15, 270, 160, 8);
 
   fill(255);
   textSize(14);
-  text("TELEMETRY MONITOR", 30, 38);
-
+  text("ROCKET TELEMETRY & FINS", 30, 38);
+  
   textSize(13);
-  fill(currentRoll >= 0 ? color(100, 230, 120) : color(255, 100, 100));
+  fill(200, 220, 255);
   text("ROLL:  " + nf(currentRoll, 0, 2) + "°", 30, 62);
-
-  fill(currentPitch >= 0 ? color(100, 230, 120) : color(255, 100, 100));
   text("PITCH: " + nf(currentPitch, 0, 2) + "°", 30, 82);
 
-  // Connection Indicator
+  // Fin Angles Display
+  stroke(60, 70, 90);
+  line(30, 93, 260, 93);
+  
+  fill(255, 180, 80);
+  text("FIN 0 (GPIO 18): " + nf(currentFins[0], 0, 1) + "°", 30, 115);
+  text("FIN 1 (GPIO 19): " + nf(currentFins[1], 0, 1) + "°", 30, 133);
+  text("FIN 2 (GPIO 23): " + nf(currentFins[2], 0, 1) + "°", 30, 151);
+
+  // Connection dot
   fill(serialConnected ? color(50, 220, 100) : color(230, 50, 50));
   noStroke();
-  ellipse(230, 34, 10, 10);
-
+  ellipse(265, 34, 10, 10);
+  
   hint(ENABLE_DEPTH_TEST);
 }
