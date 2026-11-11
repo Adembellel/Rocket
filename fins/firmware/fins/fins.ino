@@ -10,7 +10,7 @@
 
 const float GYRO_LSB   = 65.5;     // LSB per deg/s at ±500 deg/s
 const float ACCEL_LSB  = 4096.0;   // LSB per g at ±8 g
-const float RAD_TO_DEG = 57.29578;
+
 
 // ---------- Fins ----------
 const int NUM_FINS       = 4;
